@@ -1,0 +1,61 @@
+.version 6.5
+.target sm_50
+.address_size 64
+
+.visible .entry polynomial_kernel(
+    .param .u64 val_param_x, // float *x
+    .param .u64 val_param_a, // float *a
+    .param .u32 val_param_n  // int n
+)
+{
+    .reg .u32   %n;
+    .reg .u64   %param_x_raw;
+    .reg .u64   %param_a_raw;
+    .reg .u64   %x_ptr;
+    .reg .u64   %a_ptr;
+
+    .reg .f32   %arg_x;
+    .reg .f32   %result;
+    .reg .f32   %coeff;
+
+    .reg .u64   %offset;
+    .reg .u64   %curr_addr;
+    .reg .u32   %i;
+    .reg .pred  %p;
+
+    ld.param.u64    %param_x_raw, [val_param_x];
+    ld.param.u64    %param_a_raw, [val_param_a];
+    ld.param.u32    %n,           [val_param_n];
+
+    cvta.to.global.u64  %x_ptr, %param_x_raw;
+    cvta.to.global.u64  %a_ptr, %param_a_raw;
+
+    ld.global.f32   %arg_x, [%x_ptr];
+
+    mul.wide.u32    %offset, %n, 4;
+    add.u64         %curr_addr, %a_ptr, %offset; // a[n]
+
+    ld.global.f32   %result, [%curr_addr];
+
+    setp.eq.u32     %p, %n, 0;
+    @%p bra EndLoop;
+
+    mov.u32         %i, %n;
+
+LoopStart:
+    sub.u32         %i, %i, 1;
+
+    mul.wide.u32    %offset, %i, 4;
+    add.u64         %curr_addr, %a_ptr, %offset;
+    ld.global.f32   %coeff, [%curr_addr];
+
+    fma.rn.f32      %result, %result, %arg_x, %coeff;
+
+    setp.gt.u32     %p, %i, 0;
+    @%p bra LoopStart;
+
+EndLoop:
+    st.global.f32   [%x_ptr], %result;
+
+    ret;
+}
